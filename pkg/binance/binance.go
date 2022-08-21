@@ -45,11 +45,9 @@ func (c *Client) CreateFutureOrder(
 		Symbol(symbol).
 		Quantity(quantity).
 		Side(side).
-		Type(orderType).
-		TimeInForce(timeInForce).
-		ReduceOnly(reduceOnly)
-	if price != "" {
-		createOrderService = createOrderService.Price(price)
+		Type(orderType)
+	if orderType != futures.OrderTypeMarket {
+		createOrderService = createOrderService.Price(price).TimeInForce(timeInForce).ReduceOnly(reduceOnly)
 	}
 
 	resp, err := createOrderService.Do(ctx)
