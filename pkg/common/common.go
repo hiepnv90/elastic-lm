@@ -76,11 +76,12 @@ func BigAbs(a *big.Int) *big.Int {
 	return new(big.Int).Abs(a)
 }
 
-func FormatAmount(amount *big.Int, decimals int) string {
+func FormatAmount(amount *big.Int, decimals int, precision int) string {
 	factor := BigExp(big.NewInt(10), int64(decimals))
+	prec := BigExp(big.NewInt(10), int64(decimals-precision))
 	return fmt.Sprintf(
 		"%s.%s",
 		BigDiv(amount, factor).String(),
-		BigMod(amount, factor).String(),
+		BigDiv(BigMod(amount, factor), prec).String(),
 	)
 }

@@ -8,12 +8,14 @@ import (
 )
 
 type Config struct {
+	Debug    bool   `yaml:"debug"`
 	GraphQL  string `yaml:"graphql"`
 	Position string `yaml:"position"`
 }
 
 func Default() *Config {
 	return &Config{
+		Debug:    true,
 		GraphQL:  "https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic",
 		Position: "0",
 	}

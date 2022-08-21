@@ -7,12 +7,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"go.uber.org/zap"
 )
 
 type Client struct {
 	baseURL string
 
 	httpClient *http.Client
+	logger     *zap.SugaredLogger
 }
 
 func New(baseURL string, httpClient *http.Client) *Client {
@@ -27,8 +30,13 @@ func New(baseURL string, httpClient *http.Client) *Client {
 }
 
 func (c *Client) Do(url string, method string, body io.Reader) (*http.Response, error) {
+	l := c.logger.With("url", url, "method", method)
+
+	l.Debugw("Make request to server")
+
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
+		l.Errorw("Fail to create new request", "error", err)
 		return nil, err
 	}
 
@@ -36,7 +44,13 @@ func (c *Client) Do(url string, method string, body io.Reader) (*http.Response, 
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	return c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		l.Errorw("Fail to make request to server", "error", err)
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func (c *Client) Post(url string, body interface{}) (*http.Response, error) {
@@ -84,6 +98,8 @@ type PositionsResponse struct {
 }
 
 func (c *Client) GetPositions(ids []string) ([]Position, error) {
+	l := c.logger.With("ids", ids)
+
 	idsStr := strings.Join(ids, ",")
 	query := fmt.Sprintf("{\n  positions(where: {id_in: [%s]}) {\n    id\n    liquidity\n    pool {\n      sqrtPrice\n      tick\n      token0 {\n        symbol\n        decimals\n      }\n      token1 {\n        symbol\n        decimals\n      }\n    }\n    tickLower {\n      tickIdx\n    }\n    tickUpper {\n      tickIdx\n    }\n  }\n}", idsStr)
 	req := map[string]string{
@@ -92,12 +108,14 @@ func (c *Client) GetPositions(ids []string) ([]Position, error) {
 
 	resp, err := c.Post(c.baseURL, req)
 	if err != nil {
+		l.Errorw("Fail to query positions", "error", err)
 		return nil, err
 	}
 
 	var posResp PositionsResponse
 	err = json.NewDecoder(resp.Body).Decode(&posResp)
 	if err != nil {
+		l.Errorw("Fail to debug positions data", "error", err)
 		return nil, err
 	}
 

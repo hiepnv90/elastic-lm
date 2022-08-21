@@ -1,2 +1,3 @@
+debug: true
 graphql: "https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic"
 position: "1239"
