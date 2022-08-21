@@ -26,6 +26,7 @@ func New(baseURL string, httpClient *http.Client) *Client {
 	return &Client{
 		baseURL:    baseURL,
 		httpClient: httpClient,
+		logger:     zap.S(),
 	}
 }
 
