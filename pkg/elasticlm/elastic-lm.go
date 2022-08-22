@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/adshao/go-binance/v2/futures"
@@ -15,11 +16,11 @@ import (
 )
 
 type ElasticLM struct {
-	interval                 time.Duration
-	positionIDs              []string
-	positionMap              map[string]position.Position
-	positionsSnapshot        map[string]position.Position
-	symbolAmountPrecisionMap map[string]int
+	interval          time.Duration
+	positionIDs       []string
+	positionMap       map[string]position.Position
+	positionsSnapshot map[string]position.Position
+	symbolInfoMap     map[string]futures.Symbol
 
 	client  *graphql.Client
 	bclient *binance.Client
@@ -33,14 +34,14 @@ func New(
 	interval time.Duration,
 ) *ElasticLM {
 	return &ElasticLM{
-		interval:                 interval,
-		positionIDs:              positionIDs,
-		positionMap:              make(map[string]position.Position),
-		positionsSnapshot:        make(map[string]position.Position),
-		symbolAmountPrecisionMap: make(map[string]int),
-		client:                   client,
-		bclient:                  bclient,
-		logger:                   zap.S(),
+		interval:          interval,
+		positionIDs:       positionIDs,
+		positionMap:       make(map[string]position.Position),
+		positionsSnapshot: make(map[string]position.Position),
+		symbolInfoMap:     make(map[string]futures.Symbol),
+		client:            client,
+		bclient:           bclient,
+		logger:            zap.S(),
 	}
 }
 
@@ -57,7 +58,7 @@ func (e *ElasticLM) Run(ctx context.Context) error {
 			return err
 		}
 		for _, symbolInfo := range exchangeInfo.Symbols {
-			e.symbolAmountPrecisionMap[symbolInfo.Symbol] = symbolInfo.QuantityPrecision
+			e.symbolInfoMap[symbolInfo.Symbol] = symbolInfo
 		}
 	}
 
@@ -176,7 +177,8 @@ func (e *ElasticLM) hedgeToken(token common.Token) (*big.Int, error) {
 	}
 
 	symbol := token.GetBinancePerpetualSymbol()
-	precision := e.symbolAmountPrecisionMap[symbol]
+	symbolInfo := e.symbolInfoMap[symbol]
+	precision := symbolInfo.QuantityPrecision
 
 	amount := token.Amount
 	side := futures.SideTypeSell
@@ -205,6 +207,9 @@ func (e *ElasticLM) hedgeToken(token common.Token) (*big.Int, error) {
 		reduceOnly,
 	)
 	if err != nil {
+		if strings.Contains(err.Error(), "code=-4164") {
+			return common.Big0, nil
+		}
 		e.logger.Errorw("Fail to create future order", "error", err)
 		return common.Big0, err
 	}
