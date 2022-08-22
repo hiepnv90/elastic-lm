@@ -61,15 +61,6 @@ func (e *ElasticLM) Run(ctx context.Context) error {
 		}
 	}
 
-	exchangeInfo, err := e.bclient.GetExchangeInfo(ctx)
-	if err != nil {
-		l.Errorw("Fail to get exchange information", "error", err)
-		return err
-	}
-	for _, symbolInfo := range exchangeInfo.Symbols {
-		e.symbolAmountPrecisionMap[symbolInfo.Symbol] = symbolInfo.QuantityPrecision
-	}
-
 	ticker := time.NewTicker(e.interval)
 	defer ticker.Stop()
 
