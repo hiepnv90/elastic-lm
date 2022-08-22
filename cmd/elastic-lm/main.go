@@ -39,8 +39,6 @@ func main() {
 	undo := zap.ReplaceGlobals(logger)
 	defer undo()
 
-	zap.S().Infow("Start application", "cfg", cfg)
-
 	zap.S().Infow("Create new client for GraphQL", "baseURL", cfg.GraphQL)
 	client = graphql.New(cfg.GraphQL, nil)
 
