@@ -165,6 +165,8 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 	}
 	posSnapshot.Token1.Amount = common.BigAdd(posSnapshot.Token1.Amount, amount1)
 
+	e.positionsSnapshot[newPosInfo.ID] = posSnapshot
+
 	return nil
 }
 
@@ -176,22 +178,26 @@ func (e *ElasticLM) hedgeToken(token common.Token) (*big.Int, error) {
 	symbol := token.GetBinancePerpetualSymbol()
 	precision := e.symbolAmountPrecisionMap[symbol]
 
-	amount := token.RoundAmount(precision, common.RoundTypeFloor)
-	if common.BigIsZero(amount) {
-		return common.Big0, nil
-	}
-
+	amount := token.Amount
 	side := futures.SideTypeSell
 	reduceOnly := false
 	if amount.Cmp(common.Big0) < 0 {
+		amount = common.BigNeg(amount)
 		side = futures.SideTypeBuy
 		reduceOnly = true
 	}
 
+	amount = common.RoundAmount(amount, token.Decimals, precision, common.RoundTypeFloor)
+	if common.BigIsZero(amount) {
+		return common.Big0, nil
+	}
+
+	e.logger.Infow("Hedging for token", "token", token)
+
 	resp, err := e.bclient.CreateFutureOrder(
 		context.Background(),
 		symbol,
-		common.FormatAmount(common.BigAbs(amount), token.Decimals, 0),
+		common.FormatAmount(amount, token.Decimals, 0),
 		"0",
 		side,
 		futures.OrderTypeMarket,
@@ -204,6 +210,10 @@ func (e *ElasticLM) hedgeToken(token common.Token) (*big.Int, error) {
 	}
 
 	e.logger.Infow("Successfully create futures' order", "resp", resp)
+
+	if side == futures.SideTypeBuy {
+		amount = common.BigNeg(amount)
+	}
 
 	return amount, nil
 }
