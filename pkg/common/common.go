@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"strconv"
 )
 
 type RoundType int
@@ -105,11 +106,16 @@ func FormatAmount(amount *big.Int, decimals int, precision int) string {
 		amount = RoundAmount(amount, decimals, precision, RoundTypeFloor)
 	}
 
+	if precision < 0 {
+		precision = 0
+	}
+
 	factor := BigExp(big.NewInt(10), int64(decimals))
+	prec := BigExp(big.NewInt(10), int64(decimals-precision))
 	return fmt.Sprintf(
-		"%s.%s",
+		"%s.%0"+strconv.Itoa(precision)+"s",
 		BigDiv(amount, factor).String(),
-		BigMod(amount, factor).String(),
+		BigDiv(BigMod(amount, factor), prec).String(),
 	)
 }
 

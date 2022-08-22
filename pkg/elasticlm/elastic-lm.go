@@ -64,7 +64,7 @@ func (e *ElasticLM) Run(ctx context.Context) error {
 	ticker := time.NewTicker(e.interval)
 	defer ticker.Stop()
 
-	err = e.updatePositions(ctx, isHedge)
+	err := e.updatePositions(ctx, isHedge)
 	if err != nil {
 		l.Errorw("Fail to update positions' information", "error", err)
 		return err
@@ -112,7 +112,7 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 	}
 
 	l.Infow("Update position's information", "info", newPosInfo.String())
-	e.positionMap[posInfo.ID] = newPosInfo
+	e.positionMap[newPosInfo.ID] = newPosInfo
 
 	if !isHedge {
 		return nil
