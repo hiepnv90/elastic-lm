@@ -7,10 +7,16 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type Binance struct {
+	APIKey    string `yaml:"api_key"`
+	SecretKey string `yaml:"secret_key"`
+}
+
 type Config struct {
 	Debug     bool     `yaml:"debug"`
 	GraphQL   string   `yaml:"graphql"`
 	Positions []string `yaml:"positions"`
+	Binance   Binance  `yaml:"binance"`
 }
 
 func Default() *Config {
@@ -18,6 +24,10 @@ func Default() *Config {
 		Debug:     false,
 		GraphQL:   "https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic",
 		Positions: []string{},
+		Binance: Binance{
+			APIKey:    "",
+			SecretKey: "",
+		},
 	}
 }
 

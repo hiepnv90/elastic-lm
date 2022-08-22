@@ -2,7 +2,15 @@ package common
 
 import (
 	"fmt"
+	"math"
 	"math/big"
+)
+
+type RoundType int
+
+const (
+	RoundTypeFloor RoundType = iota
+	RoundTypeCeiling
 )
 
 var (
@@ -76,12 +84,35 @@ func BigAbs(a *big.Int) *big.Int {
 	return new(big.Int).Abs(a)
 }
 
+func RoundAmount(
+	amount *big.Int, decimals int, precision int, roundType RoundType,
+) *big.Int {
+	if precision >= decimals {
+		return amount
+	}
+
+	factor := BigExp(big.NewInt(10), int64(decimals-precision))
+	round := BigDiv(amount, factor)
+	if roundType == RoundTypeCeiling && !BigIsZero(BigMod(amount, factor)) {
+		round = BigAdd(round, Big1)
+	}
+
+	return BigMul(round, factor)
+}
+
 func FormatAmount(amount *big.Int, decimals int, precision int) string {
+	if precision != 0 {
+		amount = RoundAmount(amount, decimals, precision, RoundTypeFloor)
+	}
+
 	factor := BigExp(big.NewInt(10), int64(decimals))
-	prec := BigExp(big.NewInt(10), int64(decimals-precision))
 	return fmt.Sprintf(
 		"%s.%s",
 		BigDiv(amount, factor).String(),
-		BigDiv(BigMod(amount, factor), prec).String(),
+		BigMod(amount, factor).String(),
 	)
+}
+
+func FloatIsZero(f float64) bool {
+	return math.Abs(f) < 1e10
 }

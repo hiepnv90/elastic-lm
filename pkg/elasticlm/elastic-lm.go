@@ -2,9 +2,12 @@ package elasticlm
 
 import (
 	"context"
+	"math/big"
 	"strconv"
 	"time"
 
+	"github.com/adshao/go-binance/v2/futures"
+	"github.com/hiepnv90/elastic-lm/pkg/binance"
 	"github.com/hiepnv90/elastic-lm/pkg/common"
 	"github.com/hiepnv90/elastic-lm/pkg/graphql"
 	"github.com/hiepnv90/elastic-lm/pkg/position"
@@ -12,33 +15,56 @@ import (
 )
 
 type ElasticLM struct {
-	interval    time.Duration
-	positionIDs []string
-	positionMap map[string]position.Position
+	interval                 time.Duration
+	positionIDs              []string
+	positionMap              map[string]position.Position
+	positionsSnapshot        map[string]position.Position
+	symbolAmountPrecisionMap map[string]int
 
-	client *graphql.Client
-	logger *zap.SugaredLogger
+	client  *graphql.Client
+	bclient *binance.Client
+	logger  *zap.SugaredLogger
 }
 
-func New(client *graphql.Client, positionIDs []string, interval time.Duration) *ElasticLM {
+func New(
+	client *graphql.Client,
+	bclient *binance.Client,
+	positionIDs []string,
+	interval time.Duration,
+) *ElasticLM {
 	return &ElasticLM{
-		interval:    interval,
-		positionIDs: positionIDs,
-		positionMap: make(map[string]position.Position),
-		client:      client,
-		logger:      zap.S(),
+		interval:                 interval,
+		positionIDs:              positionIDs,
+		positionMap:              make(map[string]position.Position),
+		positionsSnapshot:        make(map[string]position.Position),
+		symbolAmountPrecisionMap: make(map[string]int),
+		client:                   client,
+		bclient:                  bclient,
+		logger:                   zap.S(),
 	}
 }
 
-func (e *ElasticLM) Start(ctx context.Context) error {
+func (e *ElasticLM) Run(ctx context.Context) error {
 	l := e.logger.With("positions", e.positionIDs, "interval", e.interval)
 
-	l.Infow("Start monitoring positions")
+	isHedge := e.bclient != nil
+	l.Infow("Start monitoring positions", "isHedge", isHedge)
+
+	if isHedge {
+		exchangeInfo, err := e.bclient.GetExchangeInfo(ctx)
+		if err != nil {
+			l.Errorw("Fail to get exchange information", "error", err)
+			return err
+		}
+		for _, symbolInfo := range exchangeInfo.Symbols {
+			e.symbolAmountPrecisionMap[symbolInfo.Symbol] = symbolInfo.QuantityPrecision
+		}
+	}
 
 	ticker := time.NewTicker(e.interval)
 	defer ticker.Stop()
 
-	err := e.updatePositions(ctx)
+	err = e.updatePositions(ctx, isHedge)
 	if err != nil {
 		l.Errorw("Fail to update positions' information", "error", err)
 		return err
@@ -50,7 +76,7 @@ func (e *ElasticLM) Start(ctx context.Context) error {
 			l.Infow("Stop monitoring positions")
 			return nil
 		case <-ticker.C:
-			err = e.updatePositions(ctx)
+			err = e.updatePositions(ctx, isHedge)
 			if err != nil {
 				l.Errorw("Fail to update positions' information", "error", err)
 			}
@@ -58,7 +84,7 @@ func (e *ElasticLM) Start(ctx context.Context) error {
 	}
 }
 
-func (e *ElasticLM) updatePositions(ctx context.Context) error {
+func (e *ElasticLM) updatePositions(ctx context.Context, isHedge bool) error {
 	l := e.logger
 
 	posInfos, err := e.getPositions(ctx)
@@ -68,14 +94,118 @@ func (e *ElasticLM) updatePositions(ctx context.Context) error {
 	}
 
 	for _, posInfo := range posInfos {
-		oldPosInfo, ok := e.positionMap[posInfo.ID]
-		if !ok || !oldPosInfo.Equal(posInfo) {
-			l.Infow("Update position's information", "info", posInfo.String())
-			e.positionMap[posInfo.ID] = posInfo
+		err = e.updatePosition(posInfo, isHedge)
+		if err != nil {
+			l.Warnw("Fail to update position information", "info", posInfo.String(), "error", err)
 		}
 	}
 
 	return nil
+}
+
+func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) error {
+	l := e.logger
+
+	posInfo, ok := e.positionMap[newPosInfo.ID]
+	if ok && posInfo.Equal(newPosInfo) {
+		return nil
+	}
+
+	l.Infow("Update position's information", "info", newPosInfo.String())
+	e.positionMap[posInfo.ID] = newPosInfo
+
+	if !isHedge {
+		return nil
+	}
+
+	if !ok {
+		amount0, err := e.hedgeToken(newPosInfo.Token0)
+		if err != nil {
+			l.Warnw("Fail to hedge for token", "token", newPosInfo.Token0.String(), "error", err)
+		}
+
+		amount1, err := e.hedgeToken(newPosInfo.Token1)
+		if err != nil {
+			l.Warnw("Fail to hedge for token", "token", newPosInfo.Token1.String(), "error", err)
+		}
+
+		e.positionsSnapshot[newPosInfo.ID] = position.Position{
+			ID: newPosInfo.ID,
+			Token0: common.Token{
+				Amount:   amount0,
+				Symbol:   newPosInfo.Token0.Symbol,
+				Decimals: newPosInfo.Token0.Decimals,
+			},
+			Token1: common.Token{
+				Amount:   amount1,
+				Symbol:   newPosInfo.Token1.Symbol,
+				Decimals: newPosInfo.Token1.Decimals,
+			},
+		}
+		return nil
+	}
+
+	posSnapshot := e.positionsSnapshot[newPosInfo.ID]
+
+	// Hedge for token0 delta
+	token0 := newPosInfo.Token0
+	token0.Amount = common.BigSub(token0.Amount, posSnapshot.Token0.Amount)
+	amount0, err := e.hedgeToken(token0)
+	if err != nil {
+		l.Warnw("Fail to hedge for token", "token", token0, "error", err)
+	}
+	posSnapshot.Token0.Amount = common.BigAdd(posSnapshot.Token0.Amount, amount0)
+
+	// Hedge for token1 delta
+	token1 := newPosInfo.Token1
+	token1.Amount = common.BigSub(token1.Amount, posSnapshot.Token1.Amount)
+	amount1, err := e.hedgeToken(token1)
+	if err != nil {
+		l.Warnw("Fail to hedge for token", "token", token1, "error", err)
+	}
+	posSnapshot.Token1.Amount = common.BigAdd(posSnapshot.Token1.Amount, amount1)
+
+	return nil
+}
+
+func (e *ElasticLM) hedgeToken(token common.Token) (*big.Int, error) {
+	if token.IsStable() {
+		return token.Amount, nil
+	}
+
+	symbol := token.GetBinancePerpetualSymbol()
+	precision := e.symbolAmountPrecisionMap[symbol]
+
+	amount := token.RoundAmount(precision, common.RoundTypeFloor)
+	if common.BigIsZero(amount) {
+		return common.Big0, nil
+	}
+
+	side := futures.SideTypeSell
+	reduceOnly := false
+	if amount.Cmp(common.Big0) < 0 {
+		side = futures.SideTypeBuy
+		reduceOnly = true
+	}
+
+	resp, err := e.bclient.CreateFutureOrder(
+		context.Background(),
+		symbol,
+		common.FormatAmount(common.BigAbs(amount), token.Decimals, 0),
+		"0",
+		side,
+		futures.OrderTypeMarket,
+		futures.TimeInForceTypeGTC,
+		reduceOnly,
+	)
+	if err != nil {
+		e.logger.Errorw("Fail to create future order", "error", err)
+		return common.Big0, err
+	}
+
+	e.logger.Infow("Successfully create futures' order", "resp", resp)
+
+	return amount, nil
 }
 
 func (e *ElasticLM) getPositions(ctx context.Context) ([]position.Position, error) {

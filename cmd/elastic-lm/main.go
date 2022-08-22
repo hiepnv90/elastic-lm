@@ -9,6 +9,7 @@ import (
 
 	"github.com/hiepnv90/elastic-lm/internal/app"
 	"github.com/hiepnv90/elastic-lm/internal/config"
+	"github.com/hiepnv90/elastic-lm/pkg/binance"
 	"github.com/hiepnv90/elastic-lm/pkg/elasticlm"
 	"github.com/hiepnv90/elastic-lm/pkg/graphql"
 	"go.uber.org/zap"
@@ -43,13 +44,16 @@ func main() {
 	zap.S().Infow("Create new client for GraphQL", "baseURL", cfg.GraphQL)
 	client = graphql.New(cfg.GraphQL, nil)
 
+	zap.S().Infow("Create new binance's client")
+	bclient := setupBinanceClient(cfg.Binance)
+
 	zap.S().Infow("Create new ElasticLM instance", "positions", cfg.Positions)
-	elasticLM := elasticlm.New(client, cfg.Positions, time.Second)
+	elasticLM := elasticlm.New(client, bclient, cfg.Positions, time.Second)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	err = elasticLM.Start(ctx)
+	err = elasticLM.Run(ctx)
 	if err != nil {
 		zap.S().Fatalw("Fail to monitor positions", "error", err)
 	}
@@ -63,4 +67,11 @@ func setupLogger(debug bool) *zap.Logger {
 	}
 
 	return app.NewLogger(logLevel)
+}
+
+func setupBinanceClient(cfg config.Binance) *binance.Client {
+	if cfg.APIKey == "" || cfg.SecretKey == "" {
+		return nil
+	}
+	return binance.New(cfg.APIKey, cfg.SecretKey)
 }
