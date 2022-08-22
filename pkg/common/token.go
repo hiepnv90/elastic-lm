@@ -3,6 +3,7 @@ package common
 import (
 	"fmt"
 	"math/big"
+	"strings"
 )
 
 type Token struct {
@@ -20,12 +21,34 @@ func (t Token) Equal(o Token) bool {
 }
 
 func (t Token) IsStable() bool {
-	return t.Symbol == "USDT" ||
-		t.Symbol == "USDC" ||
-		t.Symbol == "DAI" ||
-		t.Symbol == "BUSD"
+	symbol := strings.ToUpper(t.Symbol)
+	return symbol == "USDT" ||
+		symbol == "USDC" ||
+		symbol == "DAI" ||
+		symbol == "BUSD" ||
+		symbol == "MUSD" ||
+		symbol == "USDK" ||
+		symbol == "MIMATIC"
 }
 
 func (t Token) FormatAmount(precision int) string {
 	return FormatAmount(t.Amount, t.Decimals, precision)
+}
+
+func (t Token) NormalizedSymbol() string {
+	symbol := strings.ToUpper(t.Symbol)
+	switch symbol {
+	case "STMATIC", "WMATIC":
+		return "MATIC"
+	case "WBTC":
+		return "BTC"
+	case "WETH":
+		return "ETH"
+	default:
+		return symbol
+	}
+}
+
+func (t Token) GetBinancePerpetualSymbol() string {
+	return t.NormalizedSymbol() + "USDT"
 }

@@ -85,3 +85,7 @@ func FormatAmount(amount *big.Int, decimals int, precision int) string {
 		BigDiv(BigMod(amount, factor), prec).String(),
 	)
 }
+
+func FloatIsZero(f float64) bool {
+	return math.Abs(f) < 1e10
+}

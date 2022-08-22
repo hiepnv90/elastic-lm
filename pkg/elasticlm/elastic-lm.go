@@ -12,21 +12,32 @@ import (
 )
 
 type ElasticLM struct {
-	interval    time.Duration
-	positionIDs []string
-	positionMap map[string]position.Position
+	interval                 time.Duration
+	positionIDs              []string
+	positionMap              map[string]position.Position
+	positionsSnapshot        map[string]position.Position
+	symbolAmountPrecisionMap map[string]int
 
-	client *graphql.Client
-	logger *zap.SugaredLogger
+	client  *graphql.Client
+	bclient *binance.Client
+	logger  *zap.SugaredLogger
 }
 
-func New(client *graphql.Client, positionIDs []string, interval time.Duration) *ElasticLM {
+func New(
+	client *graphql.Client,
+	bclient *binance.Client,
+	positionIDs []string,
+	interval time.Duration,
+) *ElasticLM {
 	return &ElasticLM{
-		interval:    interval,
-		positionIDs: positionIDs,
-		positionMap: make(map[string]position.Position),
-		client:      client,
-		logger:      zap.S(),
+		interval:                 interval,
+		positionIDs:              positionIDs,
+		positionMap:              make(map[string]position.Position),
+		positionsSnapshot:        make(map[string]position.Position),
+		symbolAmountPrecisionMap: make(map[string]int),
+		client:                   client,
+		bclient:                  bclient,
+		logger:                   zap.S(),
 	}
 }
 
@@ -34,6 +45,15 @@ func (e *ElasticLM) Start(ctx context.Context) error {
 	l := e.logger.With("positions", e.positionIDs, "interval", e.interval)
 
 	l.Infow("Start monitoring positions")
+
+	exchangeInfo, err := e.bclient.GetExchangeInfo(ctx)
+	if err != nil {
+		l.Errorw("Fail to get exchange information", "error", err)
+		return err
+	}
+	for _, symbolInfo := range exchangeInfo.Symbols {
+		e.symbolAmountPrecisionMap[symbolInfo.Symbol] = symbolInfo.QuantityPrecision
+	}
 
 	ticker := time.NewTicker(e.interval)
 	defer ticker.Stop()
@@ -68,14 +88,50 @@ func (e *ElasticLM) updatePositions(ctx context.Context) error {
 	}
 
 	for _, posInfo := range posInfos {
-		oldPosInfo, ok := e.positionMap[posInfo.ID]
-		if !ok || !oldPosInfo.Equal(posInfo) {
-			l.Infow("Update position's information", "info", posInfo.String())
-			e.positionMap[posInfo.ID] = posInfo
+		err = e.updatePosition(posInfo)
+		if err != nil {
+			l.Warnw("Fail to update position information", "info", posInfo.String(), "error", err)
 		}
 	}
 
 	return nil
+}
+
+func (e *ElasticLM) updatePosition(newPosInfo position.Position) error {
+	posInfo, ok := e.positionMap[posInfo.ID]
+	if ok && posInfo.Equal(newPosInfo) {
+		return nil
+	}
+
+	l.Infow("Update position's information", "info", posInfo.String())
+	e.positionMap[posInfo.ID] = newPosInfo
+
+	if !ok {
+		if !posInfo.Token0.IsStable() {
+		}
+
+		if !posInfo.Token1.IsStable() {
+		}
+	}
+}
+
+func (e *ElasticLM) hedgeToken(token common.Token, amount *big.Int) error {
+	if token.IsStable() {
+		return nil
+	}
+
+	symbol := token.GetBinancePerpetualSymbol()
+	precision := e.symbolAmountPrecisionMap[symbol]
+	amount := common.FormatAmount(amount, token.Decimals, precision)
+
+	famt, err := strconv.ParseFloat(amount, 64)
+	if err != nil {
+		e.logger.Errorw("Fail to parse amount to float", "amount", amount, "error", err)
+		return err
+	}
+	if common.FloatIsZero(famt) {
+		return nil
+	}
 }
 
 func (e *ElasticLM) getPositions(ctx context.Context) ([]position.Position, error) {
