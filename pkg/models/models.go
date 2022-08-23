@@ -1,5 +1,9 @@
 package models
 
+import (
+	"time"
+)
+
 type Order struct {
 	ID            uint64 `gorm:"primaryKey"`
 	PositionID    string `gorm:"index"`

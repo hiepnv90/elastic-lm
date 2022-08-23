@@ -17,28 +17,28 @@ import (
 
 type ElasticLM struct {
 	interval          time.Duration
+	positionIDs       []string
 	positionMap       map[string]position.Position
 	positionsSnapshot map[string]position.Position
 	symbolInfoMap     map[string]futures.Symbol
 
-	db      *gorm.DB
 	client  *graphql.Client
 	bclient *binance.Client
 	logger  *zap.SugaredLogger
 }
 
 func New(
-	db *gorm.DB,
 	client *graphql.Client,
 	bclient *binance.Client,
+	positionIDs []string,
 	interval time.Duration,
 ) *ElasticLM {
 	return &ElasticLM{
 		interval:          interval,
+		positionIDs:       positionIDs,
 		positionMap:       make(map[string]position.Position),
 		positionsSnapshot: make(map[string]position.Position),
 		symbolInfoMap:     make(map[string]futures.Symbol),
-		db:                db,
 		client:            client,
 		bclient:           bclient,
 		logger:            zap.S(),
@@ -61,17 +61,6 @@ func (e *ElasticLM) Run(ctx context.Context) error {
 		for _, symbolInfo := range exchangeInfo.Symbols {
 			e.symbolInfoMap[symbolInfo.Symbol] = symbolInfo
 		}
-	}
-
-	l.Infow("Initialize positions snapshot")
-	err := e.initPositionsSnapshot()
-	if err != nil {
-	}
-
-	positions, err := e.listOpenPositions()
-	if err != nil {
-		l.Errorw("Fail to list open positions", "error", err)
-		return err
 	}
 
 	ticker := time.NewTicker(e.interval)
