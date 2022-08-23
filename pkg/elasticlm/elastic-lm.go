@@ -200,7 +200,7 @@ func (e *ElasticLM) hedgeToken(token common.Token) (*big.Int, error) {
 	resp, err := e.bclient.CreateFutureOrder(
 		context.Background(),
 		symbol,
-		common.FormatAmount(amount, token.Decimals, 0),
+		common.FormatAmount(amount, token.Decimals, precision),
 		"0",
 		side,
 		futures.OrderTypeMarket,
