@@ -102,12 +102,11 @@ func RoundAmount(
 }
 
 func FormatAmount(amount *big.Int, decimals int, precision int) string {
-	if precision != 0 {
-		amount = RoundAmount(amount, decimals, precision, RoundTypeFloor)
-	}
-
 	if precision < 0 {
+		amount = RoundAmount(amount, decimals, precision, RoundTypeFloor)
 		precision = 0
+	} else if precision > decimals {
+		precision = decimals
 	}
 
 	factor := BigExp(big.NewInt(10), int64(decimals))

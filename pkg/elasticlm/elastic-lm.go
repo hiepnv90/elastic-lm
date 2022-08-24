@@ -167,6 +167,7 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 	}
 	posSnapshot.Token1.Amount = common.BigAdd(posSnapshot.Token1.Amount, amount1)
 
+	l.Infow("Update position snapshot", "snapshot", posSnapshot)
 	e.positionsSnapshot[newPosInfo.ID] = posSnapshot
 
 	return nil
@@ -195,7 +196,7 @@ func (e *ElasticLM) hedgeToken(token common.Token) (*big.Int, error) {
 		return common.Big0, nil
 	}
 
-	e.logger.Infow("Hedging for token", "token", token)
+	e.logger.Infow("Hedging for token", "token", token, "precision", precision, "roundAmount", amount)
 
 	resp, err := e.bclient.CreateFutureOrder(
 		context.Background(),
