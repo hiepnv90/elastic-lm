@@ -102,6 +102,12 @@ func RoundAmount(
 }
 
 func FormatAmount(amount *big.Int, decimals int, precision int) string {
+	sign := ""
+	if amount.Cmp(Big0) < 0 {
+		sign = "-"
+		amount = BigNeg(amount)
+	}
+
 	if precision < 0 {
 		amount = RoundAmount(amount, decimals, precision, RoundTypeFloor)
 		precision = 0
@@ -112,7 +118,8 @@ func FormatAmount(amount *big.Int, decimals int, precision int) string {
 	factor := BigExp(big.NewInt(10), int64(decimals))
 	prec := BigExp(big.NewInt(10), int64(decimals-precision))
 	return fmt.Sprintf(
-		"%s.%0"+strconv.Itoa(precision)+"s",
+		"%s%s.%0"+strconv.Itoa(precision)+"s",
+		sign,
 		BigDiv(amount, factor).String(),
 		BigDiv(BigMod(amount, factor), prec).String(),
 	)
