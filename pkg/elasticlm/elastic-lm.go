@@ -140,6 +140,10 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 			newPosInfo.Token0.Amount = amount0
 			newPosInfo.Token1.Amount = amount1
 			e.positionsSnapshot[newPosInfo.ID] = newPosInfo
+		} else {
+			newPosInfo.Token0.Amount = common.Big0
+			newPosInfo.Token1.Amount = common.Big0
+			e.positionsSnapshot[newPosInfo.ID] = newPosInfo
 		}
 		return nil
 	}
