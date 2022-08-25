@@ -46,7 +46,7 @@ func main() {
 	bclient := setupBinanceClient(cfg.Binance)
 
 	zap.S().Infow("Create new ElasticLM instance", "positions", cfg.Positions)
-	elasticLM := elasticlm.New(client, bclient, cfg.Positions, time.Second)
+	elasticLM := elasticlm.New(client, bclient, cfg.Positions, cfg.AmountThreshold, time.Second)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

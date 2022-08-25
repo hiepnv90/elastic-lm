@@ -2,14 +2,18 @@ package position
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/hiepnv90/elastic-lm/pkg/common"
 )
 
 type Position struct {
-	ID     string
-	Token0 common.Token
-	Token1 common.Token
+	ID         string
+	Liquidity  *big.Int
+	MaxAmount0 *big.Int
+	MaxAmount1 *big.Int
+	Token0     common.Token
+	Token1     common.Token
 }
 
 func (p Position) String() string {

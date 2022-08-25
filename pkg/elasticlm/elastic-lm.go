@@ -18,6 +18,7 @@ import (
 type ElasticLM struct {
 	interval          time.Duration
 	positionIDs       []string
+	amountThreshold   *big.Int
 	positionMap       map[string]position.Position
 	positionsSnapshot map[string]position.Position
 	symbolInfoMap     map[string]futures.Symbol
@@ -31,11 +32,13 @@ func New(
 	client *graphql.Client,
 	bclient *binance.Client,
 	positionIDs []string,
+	amountThreshold int,
 	interval time.Duration,
 ) *ElasticLM {
 	return &ElasticLM{
 		interval:          interval,
 		positionIDs:       positionIDs,
+		amountThreshold:   big.NewInt(int64(amountThreshold)),
 		positionMap:       make(map[string]position.Position),
 		positionsSnapshot: make(map[string]position.Position),
 		symbolInfoMap:     make(map[string]futures.Symbol),
@@ -131,27 +134,37 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 			l.Warnw("Fail to hedge for token", "token", newPosInfo.Token1.String(), "error", err)
 		}
 
-		e.positionsSnapshot[newPosInfo.ID] = position.Position{
-			ID: newPosInfo.ID,
-			Token0: common.Token{
-				Amount:   amount0,
-				Symbol:   newPosInfo.Token0.Symbol,
-				Decimals: newPosInfo.Token0.Decimals,
-			},
-			Token1: common.Token{
-				Amount:   amount1,
-				Symbol:   newPosInfo.Token1.Symbol,
-				Decimals: newPosInfo.Token1.Decimals,
-			},
-		}
+		newPosInfo.Token0.Amount = amount0
+		newPosInfo.Token1.Amount = amount1
+		e.positionsSnapshot[newPosInfo.ID] = newPosInfo
 		return nil
 	}
 
+	// Check deltaAmount threshold for hedging base on token0.
 	posSnapshot := e.positionsSnapshot[newPosInfo.ID]
-
-	// Hedge for token0 delta
+	absThreshold := common.BigDiv(
+		common.BigMul(posSnapshot.MaxAmount0, e.amountThreshold),
+		big.NewInt(100),
+	)
 	token0 := newPosInfo.Token0
 	token0.Amount = common.BigSub(token0.Amount, posSnapshot.Token0.Amount)
+	if common.BigAbs(token0.Amount).Cmp(absThreshold) <= 0 {
+		l.Infow(
+			"Ignore hedging for small change of amount",
+			"tokenSymbol", token0.Symbol,
+			"absThreshold", absThreshold,
+			"deltaAmount", token0.Amount,
+		)
+		return nil
+	}
+
+	if posSnapshot.Liquidity.Cmp(newPosInfo.Liquidity) != 0 {
+		posSnapshot.Liquidity = newPosInfo.Liquidity
+		posSnapshot.MaxAmount0 = newPosInfo.MaxAmount0
+		posSnapshot.MaxAmount1 = newPosInfo.MaxAmount1
+	}
+
+	// Hedge for token0 delta
 	amount0, err := e.hedgeToken(token0)
 	if err != nil {
 		l.Warnw("Fail to hedge for token", "token", token0, "error", err)
@@ -273,9 +286,17 @@ func (e *ElasticLM) getPositions(ctx context.Context) ([]position.Position, erro
 			return nil, err
 		}
 
+		lowerSqrtPrice := common.GetSqrtRatioAtTick(tickLower)
+		upperSqrtPrice := common.GetSqrtRatioAtTick(tickUpper)
+		maxAmount0 := common.CalculateAmount0(lowerSqrtPrice, upperSqrtPrice, liquidity)
+		maxAmount1 := common.CalculateAmount1(lowerSqrtPrice, upperSqrtPrice, liquidity)
+
 		amount0, amount1 := common.ExtractLiquidity(currentTick, tickLower, tickUpper, sqrtPrice, liquidity)
 		res = append(res, position.Position{
-			ID: posData.ID,
+			ID:         posData.ID,
+			Liquidity:  liquidity,
+			MaxAmount0: maxAmount0,
+			MaxAmount1: maxAmount1,
 			Token0: common.Token{
 				Amount:   amount0,
 				Symbol:   posData.Pool.Token0.Symbol,

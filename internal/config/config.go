@@ -13,10 +13,11 @@ type Binance struct {
 }
 
 type Config struct {
-	Debug     bool     `yaml:"debug"`
-	GraphQL   string   `yaml:"graphql"`
-	Positions []string `yaml:"positions"`
-	Binance   Binance  `yaml:"binance"`
+	Debug           bool     `yaml:"debug"`
+	GraphQL         string   `yaml:"graphql"`
+	Positions       []string `yaml:"positions"`
+	Binance         Binance  `yaml:"binance"`
+	AmountThreshold int      `yaml:"amount_threshold"`
 }
 
 func Default() *Config {
@@ -28,6 +29,7 @@ func Default() *Config {
 			APIKey:    "",
 			SecretKey: "",
 		},
+		AmountThreshold: 10,
 	}
 }
 

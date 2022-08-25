@@ -1,6 +1,7 @@
-debug: false
-graphql: "https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic"
-positions: ["1239", "1241"]
+debug: false # Run the program verbosely or not
+graphql: "https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic" # subgraph's graphql url endpoint
+positions: ["1239", "1241"] # KyberSwap elastic pool's positions need to monitor
 binance:
-  api_key: "test_binance_api_key"
-  secret_key: "test_secret_key"
+  api_key: "test_binance_api_key" # Binance's API key
+  secret_key: "test_secret_key" # Binance's API secret key
+amount_threshold: 10  # Percentage threhold of the delta amount for adjusting Binance's positions.
