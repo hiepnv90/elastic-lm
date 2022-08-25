@@ -148,7 +148,8 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 	)
 	token0 := newPosInfo.Token0
 	token0.Amount = common.BigSub(token0.Amount, posSnapshot.Token0.Amount)
-	if common.BigAbs(token0.Amount).Cmp(absThreshold) <= 0 {
+	if common.BigAbs(token0.Amount).Cmp(absThreshold) <= 0 &&
+		newPosInfo.Token0.Amount.Cmp(newPosInfo.MaxAmount0) < 0 {
 		l.Infow(
 			"Ignore hedging for small change of amount",
 			"tokenSymbol", token0.Symbol,
