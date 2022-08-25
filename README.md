@@ -1,6 +1,6 @@
 # Elastic Liquidity Mining Helper
 
-This is a simple helper program that will monitor farming positions on kyberswap.com and open/adjust corresponding short positions on Binance for hedging.
+This is a very simple program that helps monitoring farming positions on kyberswap.com and open/adjust corresponding short positions on Binance for hedging.
 
 ## Quick Start
 
