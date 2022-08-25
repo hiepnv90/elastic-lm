@@ -15,13 +15,15 @@ import (
 	"go.uber.org/zap"
 )
 
+var bps = big.NewInt(10000)
+
 type ElasticLM struct {
-	interval          time.Duration
-	positionIDs       []string
-	amountThreshold   *big.Int
-	positionMap       map[string]position.Position
-	positionsSnapshot map[string]position.Position
-	symbolInfoMap     map[string]futures.Symbol
+	interval           time.Duration
+	positionIDs        []string
+	amountThresholdBps *big.Int
+	positionMap        map[string]position.Position
+	positionsSnapshot  map[string]position.Position
+	symbolInfoMap      map[string]futures.Symbol
 
 	client  *graphql.Client
 	bclient *binance.Client
@@ -32,19 +34,19 @@ func New(
 	client *graphql.Client,
 	bclient *binance.Client,
 	positionIDs []string,
-	amountThreshold int,
+	amountThresholdBps int,
 	interval time.Duration,
 ) *ElasticLM {
 	return &ElasticLM{
-		interval:          interval,
-		positionIDs:       positionIDs,
-		amountThreshold:   big.NewInt(int64(amountThreshold)),
-		positionMap:       make(map[string]position.Position),
-		positionsSnapshot: make(map[string]position.Position),
-		symbolInfoMap:     make(map[string]futures.Symbol),
-		client:            client,
-		bclient:           bclient,
-		logger:            zap.S(),
+		interval:           interval,
+		positionIDs:        positionIDs,
+		amountThresholdBps: big.NewInt(int64(amountThresholdBps)),
+		positionMap:        make(map[string]position.Position),
+		positionsSnapshot:  make(map[string]position.Position),
+		symbolInfoMap:      make(map[string]futures.Symbol),
+		client:             client,
+		bclient:            bclient,
+		logger:             zap.S(),
 	}
 }
 
@@ -123,7 +125,7 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 		return nil
 	}
 
-	if !ok {
+	if !ok && e.amountThresholdBps.Cmp(bps) < 0 {
 		amount0, err := e.hedgeToken(newPosInfo.Token0)
 		if err != nil {
 			l.Warnw("Fail to hedge for token", "token", newPosInfo.Token0.String(), "error", err)
@@ -142,14 +144,12 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 
 	// Check deltaAmount threshold for hedging base on token0.
 	posSnapshot := e.positionsSnapshot[newPosInfo.ID]
-	absThreshold := common.BigDiv(
-		common.BigMul(posSnapshot.MaxAmount0, e.amountThreshold),
-		big.NewInt(100),
-	)
+	absThreshold := common.BigDiv(common.BigMul(posSnapshot.MaxAmount0, e.amountThresholdBps), bps)
 	token0 := newPosInfo.Token0
 	token0.Amount = common.BigSub(token0.Amount, posSnapshot.Token0.Amount)
 	if common.BigAbs(token0.Amount).Cmp(absThreshold) <= 0 &&
-		newPosInfo.Token0.Amount.Cmp(newPosInfo.MaxAmount0) < 0 {
+		newPosInfo.Token0.Amount.Cmp(newPosInfo.MaxAmount0) < 0 &&
+		newPosInfo.Token0.Amount.Cmp(common.Big0) > 0 {
 		l.Infow(
 			"Ignore hedging for small change of amount",
 			"tokenSymbol", token0.Symbol,
