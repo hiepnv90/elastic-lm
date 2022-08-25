@@ -125,20 +125,22 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 		return nil
 	}
 
-	if !ok && e.amountThresholdBps.Cmp(bps) < 0 {
-		amount0, err := e.hedgeToken(newPosInfo.Token0)
-		if err != nil {
-			l.Warnw("Fail to hedge for token", "token", newPosInfo.Token0.String(), "error", err)
-		}
+	if !ok {
+		if e.amountThresholdBps.Cmp(bps) < 0 {
+			amount0, err := e.hedgeToken(newPosInfo.Token0)
+			if err != nil {
+				l.Warnw("Fail to hedge for token", "token", newPosInfo.Token0.String(), "error", err)
+			}
 
-		amount1, err := e.hedgeToken(newPosInfo.Token1)
-		if err != nil {
-			l.Warnw("Fail to hedge for token", "token", newPosInfo.Token1.String(), "error", err)
-		}
+			amount1, err := e.hedgeToken(newPosInfo.Token1)
+			if err != nil {
+				l.Warnw("Fail to hedge for token", "token", newPosInfo.Token1.String(), "error", err)
+			}
 
-		newPosInfo.Token0.Amount = amount0
-		newPosInfo.Token1.Amount = amount1
-		e.positionsSnapshot[newPosInfo.ID] = newPosInfo
+			newPosInfo.Token0.Amount = amount0
+			newPosInfo.Token1.Amount = amount1
+			e.positionsSnapshot[newPosInfo.ID] = newPosInfo
+		}
 		return nil
 	}
 
