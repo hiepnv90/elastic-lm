@@ -158,9 +158,8 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 		newPosInfo.Token0.Amount.Cmp(common.Big0) > 0 {
 		l.Infow(
 			"Ignore hedging for small change of amount",
-			"tokenSymbol", token0.Symbol,
-			"absThreshold", absThreshold,
-			"deltaAmount", token0.Amount,
+			"token", token0,
+			"absThreshold", common.FormatAmount(absThreshold, token0.Decimals, 5),
 		)
 		return nil
 	}
@@ -216,7 +215,12 @@ func (e *ElasticLM) hedgeToken(token common.Token) (*big.Int, error) {
 		return common.Big0, nil
 	}
 
-	e.logger.Infow("Hedging for token", "token", token, "precision", precision, "roundAmount", amount)
+	e.logger.Infow(
+		"Hedging for token",
+		"token", token,
+		"precision", precision,
+		"roundAmount", common.FormatAmount(amount, token.Decimals, 5),
+	)
 
 	resp, err := e.bclient.CreateFutureOrder(
 		context.Background(),
