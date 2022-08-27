@@ -85,6 +85,7 @@ func (c *Client) CreateFutureOrder(
 			"type", orderType,
 			"timeInForce", timeInForce,
 			"reduceOnly", reduceOnly,
+			"error", err,
 		)
 		return nil, err
 	}
