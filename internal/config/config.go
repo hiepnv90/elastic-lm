@@ -12,12 +12,17 @@ type Binance struct {
 	SecretKey string `yaml:"secret_key"`
 }
 
+type SQLite struct {
+	DBName string `yaml:"db_name"`
+}
+
 type Config struct {
 	Debug              bool     `yaml:"debug"`
 	GraphQL            string   `yaml:"graphql"`
 	Positions          []string `yaml:"positions"`
 	Binance            Binance  `yaml:"binance"`
 	AmountThresholdBps int      `yaml:"amount_threshold_bps"`
+	SQLite             SQLite   `yaml:"sqlite"`
 }
 
 func Default() *Config {
@@ -30,6 +35,9 @@ func Default() *Config {
 			SecretKey: "",
 		},
 		AmountThresholdBps: 0,
+		SQLite: SQLite{
+			DBName: "elastic-lm.db",
+		},
 	}
 }
 

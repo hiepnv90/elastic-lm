@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type Order struct {
@@ -16,14 +18,22 @@ type Order struct {
 }
 
 type Position struct {
-	ID        string `gorm:"primaryKey"`
-	Symbol0   string
-	Amount0   string
-	Decimals0 int
-	Amount1   string
-	Symbol1   string
-	Decimals1 int
-	Status    string `gorm:"index"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID            string `gorm:"primaryKey"`
+	Liquidity     string
+	TickLower     int
+	TickUpper     int
+	Symbol0       string
+	Amount0       string
+	Decimals0     int
+	HedgedAmount0 string
+	Amount1       string
+	Symbol1       string
+	Decimals1     int
+	HedgedAmount1 string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func AutoMigrate(db *gorm.DB) error {
+	return db.AutoMigrate(&Position{})
 }

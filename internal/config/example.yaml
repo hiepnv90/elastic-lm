@@ -5,3 +5,5 @@ binance:
   api_key: "test_binance_api_key" # Binance's API key
   secret_key: "test_secret_key" # Binance's API secret key
 amount_threshold_bps: 1  # Amount threhold in bps for adjusting Binance's positions.
+sqlite:
+  db_name: "elastic-lm.db"
