@@ -21,14 +21,15 @@ func (t Token) Equal(o Token) bool {
 }
 
 func (t Token) IsStable() bool {
-	symbol := strings.ToUpper(t.Symbol)
+	symbol := t.NormalizedSymbol()
 	return symbol == "USDT" ||
 		symbol == "USDC" ||
 		symbol == "DAI" ||
 		symbol == "BUSD" ||
 		symbol == "MUSD" ||
 		symbol == "USDK" ||
-		symbol == "MIMATIC"
+		symbol == "MIMATIC" ||
+		symbol == "MIM"
 }
 
 func (t Token) RoundAmount(precision int, roundType RoundType) *big.Int {
@@ -42,12 +43,24 @@ func (t Token) FormatAmount(precision int) string {
 func (t Token) NormalizedSymbol() string {
 	symbol := strings.ToUpper(t.Symbol)
 	switch symbol {
+	case "USDT.E":
+		return "USDT"
+	case "DAI.E":
+		return "DAI"
+	case "USDC.E":
+		return "USDC"
 	case "STMATIC", "WMATIC":
 		return "MATIC"
-	case "WBTC":
+	case "WBTC", "WBTC.E":
 		return "BTC"
-	case "WETH":
+	case "WETH", "WETH.E":
 		return "ETH"
+	case "WAVAX", "SAVAX":
+		return "AVAX"
+	case "LINK.E":
+		return "LINK"
+	case "AAVE.E":
+		return "AAVE"
 	default:
 		return symbol
 	}
