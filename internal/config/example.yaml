@@ -10,3 +10,4 @@ binance:
 amount_threshold_bps: 1  # Amount threhold in bps for adjusting Binance's positions.
 sqlite:
   db_name: "elastic-lm.db"
+  reset: false

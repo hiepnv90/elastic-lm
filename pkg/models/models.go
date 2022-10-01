@@ -34,6 +34,10 @@ type Position struct {
 	UpdatedAt     time.Time
 }
 
-func AutoMigrate(db *gorm.DB) error {
+func AutoMigrate(db *gorm.DB, reset bool) error {
+	if reset {
+		db.Migrator().DropTable(&Position{})
+	}
+
 	return db.AutoMigrate(&Position{})
 }

@@ -20,6 +20,7 @@ type Binance struct {
 
 type SQLite struct {
 	DBName string `yaml:"db_name"`
+	Reset  bool   `yaml:"reset"`
 }
 
 type Config struct {

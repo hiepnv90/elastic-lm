@@ -314,12 +314,14 @@ func (e *ElasticLM) getPositions(ctx context.Context) ([]position.Position, erro
 
 		amount0, amount1 := common.ExtractLiquidity(currentTick, tickLower, tickUpper, sqrtPrice, liquidity)
 		res = append(res, position.Position{
-			ID:         posData.ID,
-			Liquidity:  liquidity,
-			TickLower:  tickLower,
-			TickUpper:  tickUpper,
-			MaxAmount0: maxAmount0,
-			MaxAmount1: maxAmount1,
+			ID:            posData.ID,
+			Liquidity:     liquidity,
+			TickLower:     tickLower,
+			TickUpper:     tickUpper,
+			MaxAmount0:    maxAmount0,
+			MaxAmount1:    maxAmount1,
+			HedgedAmount0: big.NewInt(0),
+			HedgedAmount1: big.NewInt(0),
 			Token0: common.Token{
 				Amount:   amount0,
 				Symbol:   posData.Pool.Token0.Symbol,
@@ -346,6 +348,8 @@ func (e *ElasticLM) loadPositions() error {
 		l.Errorw("Fail to get positions from database", "error", err)
 		return err
 	}
+
+	l.Infow("Open positions from database loaded", "positions", positions)
 
 	for _, pos := range positions {
 		liquidity := common.NewBigIntFromString(pos.Liquidity, 10)

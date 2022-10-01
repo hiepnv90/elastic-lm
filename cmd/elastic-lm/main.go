@@ -95,7 +95,7 @@ func setupDB(cfg config.SQLite) *gorm.DB {
 		zap.S().Fatalw("Fail to open database connection", "cfg", cfg, "error", err)
 	}
 
-	err = models.AutoMigrate(db)
+	err = models.AutoMigrate(db, cfg.Reset)
 	if err != nil {
 		zap.S().Fatalw("Fail to auto migrate database", "error", err)
 	}
