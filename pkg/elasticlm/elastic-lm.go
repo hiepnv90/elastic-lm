@@ -26,6 +26,7 @@ type ElasticLM struct {
 	amountThresholdBps *big.Int
 	positionMap        map[string]position.Position
 	symbolInfoMap      map[string]futures.Symbol
+	tokenInstrumentMap map[string]string
 
 	db      *gorm.DB
 	client  *graphql.Client
@@ -40,6 +41,7 @@ func New(
 	positionIDs []string,
 	amountThresholdBps int,
 	interval time.Duration,
+	tokenInstrumentMap map[string]string,
 ) *ElasticLM {
 	return &ElasticLM{
 		interval:           interval,
@@ -48,6 +50,7 @@ func New(
 		positionMap:        make(map[string]position.Position),
 		symbolInfoMap:      make(map[string]futures.Symbol),
 		db:                 db,
+		tokenInstrumentMap: tokenInstrumentMap,
 		client:             client,
 		bclient:            bclient,
 		logger:             zap.S(),
@@ -204,7 +207,7 @@ func (e *ElasticLM) hedgeToken(token common.Token) (*big.Int, error) {
 		return token.Amount, nil
 	}
 
-	symbol := token.GetBinancePerpetualSymbol()
+	symbol := e.getBinancePerpetualSymbol(token)
 	symbolInfo := e.symbolInfoMap[symbol]
 	precision := symbolInfo.QuantityPrecision
 
@@ -401,4 +404,13 @@ func (e *ElasticLM) savePositions() error {
 	}
 
 	return e.db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&positions).Error
+}
+
+func (e *ElasticLM) getBinancePerpetualSymbol(token common.Token) string {
+	symbol, ok := e.tokenInstrumentMap[strings.ToUpper(token.Symbol)]
+	if ok {
+		return symbol
+	}
+
+	return token.GetBinancePerpetualSymbol()
 }

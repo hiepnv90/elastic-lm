@@ -7,9 +7,15 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+type TokenInstrument struct {
+	Token      string `yaml:"token"`
+	Instrument string `yaml:"instrument"`
+}
+
 type Binance struct {
-	APIKey    string `yaml:"api_key"`
-	SecretKey string `yaml:"secret_key"`
+	APIKey    string            `yaml:"api_key"`
+	SecretKey string            `yaml:"secret_key"`
+	Symbols   []TokenInstrument `yaml:"symbols"`
 }
 
 type SQLite struct {
@@ -33,6 +39,7 @@ func Default() *Config {
 		Binance: Binance{
 			APIKey:    "",
 			SecretKey: "",
+			Symbols:   nil,
 		},
 		AmountThresholdBps: 0,
 		SQLite: SQLite{

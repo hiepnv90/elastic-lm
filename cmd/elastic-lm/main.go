@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
@@ -53,6 +54,13 @@ func main() {
 
 	zap.S().Infow("Create new ElasticLM instance", "positions", cfg.Positions)
 	elasticLM := elasticlm.New(db, client, bclient, cfg.Positions, cfg.AmountThresholdBps, time.Second)
+	tokenInstrumentMap := make(map[string]string)
+	for _, tokenInstrument := range cfg.Binance.Symbols {
+		token := strings.ToUpper(tokenInstrument.Token)
+		instrument := strings.ToUpper(tokenInstrument.Instrument)
+		tokenInstrumentMap[token] = instrument
+	}
+	elasticLM := elasticlm.New(client, bclient, cfg.Positions, cfg.AmountThresholdBps, time.Second, tokenInstrumentMap)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
