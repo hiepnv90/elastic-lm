@@ -60,7 +60,8 @@ func main() {
 		tokenInstrumentMap[token] = instrument
 	}
 	elasticLM := elasticlm.New(
-		db, client, bclient, cfg.Positions, cfg.AmountThresholdBps, time.Second, tokenInstrumentMap,
+		db, client, bclient, cfg.Positions, cfg.AmountThresholdBps,
+		cfg.Binance.QuoteCurrency, time.Second, tokenInstrumentMap,
 	)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

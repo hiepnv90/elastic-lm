@@ -24,6 +24,7 @@ type ElasticLM struct {
 	interval           time.Duration
 	positionIDs        []string
 	amountThresholdBps *big.Int
+	quoteCurrency      string
 	positionMap        map[string]position.Position
 	symbolInfoMap      map[string]futures.Symbol
 	tokenInstrumentMap map[string]string
@@ -40,6 +41,7 @@ func New(
 	bclient *binance.Client,
 	positionIDs []string,
 	amountThresholdBps int,
+	quoteCurrency string,
 	interval time.Duration,
 	tokenInstrumentMap map[string]string,
 ) *ElasticLM {
@@ -47,6 +49,7 @@ func New(
 		interval:           interval,
 		positionIDs:        positionIDs,
 		amountThresholdBps: big.NewInt(int64(amountThresholdBps)),
+		quoteCurrency:      quoteCurrency,
 		positionMap:        make(map[string]position.Position),
 		symbolInfoMap:      make(map[string]futures.Symbol),
 		db:                 db,
@@ -416,5 +419,5 @@ func (e *ElasticLM) getBinancePerpetualSymbol(token common.Token) string {
 		return symbol
 	}
 
-	return token.GetBinancePerpetualSymbol()
+	return token.GetBinancePerpetualSymbol(e.quoteCurrency)
 }
