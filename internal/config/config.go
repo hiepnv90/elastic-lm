@@ -13,9 +13,15 @@ type TokenInstrument struct {
 }
 
 type Binance struct {
-	APIKey    string            `yaml:"api_key"`
-	SecretKey string            `yaml:"secret_key"`
-	Symbols   []TokenInstrument `yaml:"symbols"`
+	APIKey        string            `yaml:"api_key"`
+	SecretKey     string            `yaml:"secret_key"`
+	QuoteCurrency string            `yaml:"quote_currency"`
+	Symbols       []TokenInstrument `yaml:"symbols"`
+}
+
+type SQLite struct {
+	DBName string `yaml:"db_name"`
+	Reset  bool   `yaml:"reset"`
 }
 
 type Config struct {
@@ -24,6 +30,7 @@ type Config struct {
 	Positions          []string `yaml:"positions"`
 	Binance            Binance  `yaml:"binance"`
 	AmountThresholdBps int      `yaml:"amount_threshold_bps"`
+	SQLite             SQLite   `yaml:"sqlite"`
 }
 
 func Default() *Config {
@@ -32,11 +39,15 @@ func Default() *Config {
 		GraphQL:   "https://api.thegraph.com/subgraphs/name/kybernetwork/kyberswap-elastic-matic",
 		Positions: []string{},
 		Binance: Binance{
-			APIKey:    "",
-			SecretKey: "",
-			Symbols:   nil,
+			APIKey:        "",
+			SecretKey:     "",
+			QuoteCurrency: "BUSD",
+			Symbols:       nil,
 		},
 		AmountThresholdBps: 0,
+		SQLite: SQLite{
+			DBName: "elastic-lm.db",
+		},
 	}
 }
 

@@ -66,6 +66,6 @@ func (t Token) NormalizedSymbol() string {
 	}
 }
 
-func (t Token) GetBinancePerpetualSymbol() string {
-	return t.NormalizedSymbol() + "USDT"
+func (t Token) GetBinancePerpetualSymbol(quoteCurrency string) string {
+	return t.NormalizedSymbol() + quoteCurrency
 }

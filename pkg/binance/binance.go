@@ -92,3 +92,30 @@ func (c *Client) CreateFutureOrder(
 
 	return resp, nil
 }
+
+func (c *Client) ListenUserData(
+	ctx context.Context,
+	eventC chan *futures.WsUserDataEvent,
+) (doneC, stopC chan struct{}, err error) {
+	listenKey, err := c.futureClient.NewStartUserStreamService().Do(ctx)
+	if err != nil {
+		c.logger.Errorw("Fail to create listen key", "error", err)
+		return
+	}
+
+	doneC, stopC, err = futures.WsUserDataServe(
+		listenKey,
+		func(event *futures.WsUserDataEvent) {
+			eventC <- event
+		},
+		func(err error) {
+			c.logger.Errorw("Listen user data error", "error", err)
+		},
+	)
+	if err != nil {
+		c.logger.Errorw("Fail to listen user data", "error", err)
+		return
+	}
+
+	return
+}

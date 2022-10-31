@@ -11,8 +11,11 @@ import (
 	"github.com/hiepnv90/elastic-lm/pkg/binance"
 	"github.com/hiepnv90/elastic-lm/pkg/common"
 	"github.com/hiepnv90/elastic-lm/pkg/graphql"
+	"github.com/hiepnv90/elastic-lm/pkg/models"
 	"github.com/hiepnv90/elastic-lm/pkg/position"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var bps = big.NewInt(10000)
@@ -21,21 +24,24 @@ type ElasticLM struct {
 	interval           time.Duration
 	positionIDs        []string
 	amountThresholdBps *big.Int
+	quoteCurrency      string
 	positionMap        map[string]position.Position
-	positionsSnapshot  map[string]position.Position
 	symbolInfoMap      map[string]futures.Symbol
 	tokenInstrumentMap map[string]string
 
+	db      *gorm.DB
 	client  *graphql.Client
 	bclient *binance.Client
 	logger  *zap.SugaredLogger
 }
 
 func New(
+	db *gorm.DB,
 	client *graphql.Client,
 	bclient *binance.Client,
 	positionIDs []string,
 	amountThresholdBps int,
+	quoteCurrency string,
 	interval time.Duration,
 	tokenInstrumentMap map[string]string,
 ) *ElasticLM {
@@ -43,9 +49,10 @@ func New(
 		interval:           interval,
 		positionIDs:        positionIDs,
 		amountThresholdBps: big.NewInt(int64(amountThresholdBps)),
+		quoteCurrency:      quoteCurrency,
 		positionMap:        make(map[string]position.Position),
-		positionsSnapshot:  make(map[string]position.Position),
 		symbolInfoMap:      make(map[string]futures.Symbol),
+		db:                 db,
 		tokenInstrumentMap: tokenInstrumentMap,
 		client:             client,
 		bclient:            bclient,
@@ -71,10 +78,16 @@ func (e *ElasticLM) Run(ctx context.Context) error {
 		}
 	}
 
+	err := e.loadPositions()
+	if err != nil {
+		l.Errorw("Fail to load saved positions from database", "error", err)
+		return err
+	}
+
 	ticker := time.NewTicker(e.interval)
 	defer ticker.Stop()
 
-	err := e.updatePositions(ctx, isHedge)
+	err = e.updatePositions(ctx, isHedge)
 	if err != nil {
 		l.Errorw("Fail to update positions' information", "error", err)
 		return err
@@ -110,6 +123,11 @@ func (e *ElasticLM) updatePositions(ctx context.Context, isHedge bool) error {
 		}
 	}
 
+	err = e.savePositions()
+	if err != nil {
+		l.Warnw("Fail to save positions into database", "error", err)
+	}
+
 	return nil
 }
 
@@ -117,8 +135,12 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 	l := e.logger
 
 	posInfo, ok := e.positionMap[newPosInfo.ID]
-	if ok && posInfo.Equal(newPosInfo) {
-		return nil
+	if ok {
+		newPosInfo.HedgedAmount0 = posInfo.HedgedAmount0
+		newPosInfo.HedgedAmount1 = posInfo.HedgedAmount1
+		if posInfo.Equal(newPosInfo) {
+			return nil
+		}
 	}
 
 	l.Infow("Update position's information", "info", newPosInfo.String())
@@ -139,23 +161,17 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 			if err != nil {
 				l.Warnw("Fail to hedge for token", "token", newPosInfo.Token1.String(), "error", err)
 			}
-
-			newPosInfo.Token0.Amount = amount0
-			newPosInfo.Token1.Amount = amount1
-			e.positionsSnapshot[newPosInfo.ID] = newPosInfo
-		} else {
-			newPosInfo.Token0.Amount = common.Big0
-			newPosInfo.Token1.Amount = common.Big0
-			e.positionsSnapshot[newPosInfo.ID] = newPosInfo
+			newPosInfo.HedgedAmount0 = amount0
+			newPosInfo.HedgedAmount1 = amount1
+			e.positionMap[newPosInfo.ID] = newPosInfo
 		}
 		return nil
 	}
 
 	// Check deltaAmount threshold for hedging base on token0.
-	posSnapshot := e.positionsSnapshot[newPosInfo.ID]
-	absThreshold := common.BigDiv(common.BigMul(posSnapshot.MaxAmount0, e.amountThresholdBps), bps)
+	absThreshold := common.BigDiv(common.BigMul(posInfo.MaxAmount0, e.amountThresholdBps), bps)
 	token0 := newPosInfo.Token0
-	token0.Amount = common.BigSub(token0.Amount, posSnapshot.Token0.Amount)
+	token0.Amount = common.BigSub(token0.Amount, posInfo.HedgedAmount0)
 	if common.BigAbs(token0.Amount).Cmp(absThreshold) <= 0 &&
 		newPosInfo.Token0.Amount.Cmp(newPosInfo.MaxAmount0) < 0 &&
 		newPosInfo.Token0.Amount.Cmp(common.Big0) > 0 {
@@ -167,30 +183,24 @@ func (e *ElasticLM) updatePosition(newPosInfo position.Position, isHedge bool) e
 		return nil
 	}
 
-	if posSnapshot.Liquidity.Cmp(newPosInfo.Liquidity) != 0 {
-		posSnapshot.Liquidity = newPosInfo.Liquidity
-		posSnapshot.MaxAmount0 = newPosInfo.MaxAmount0
-		posSnapshot.MaxAmount1 = newPosInfo.MaxAmount1
-	}
-
 	// Hedge for token0 delta
 	amount0, err := e.hedgeToken(token0)
 	if err != nil {
 		l.Warnw("Fail to hedge for token", "token", token0, "error", err)
 	}
-	posSnapshot.Token0.Amount = common.BigAdd(posSnapshot.Token0.Amount, amount0)
+	newPosInfo.HedgedAmount0 = common.BigAdd(posInfo.HedgedAmount0, amount0)
 
 	// Hedge for token1 delta
 	token1 := newPosInfo.Token1
-	token1.Amount = common.BigSub(token1.Amount, posSnapshot.Token1.Amount)
+	token1.Amount = common.BigSub(token1.Amount, posInfo.HedgedAmount1)
 	amount1, err := e.hedgeToken(token1)
 	if err != nil {
 		l.Warnw("Fail to hedge for token", "token", token1, "error", err)
 	}
-	posSnapshot.Token1.Amount = common.BigAdd(posSnapshot.Token1.Amount, amount1)
+	newPosInfo.HedgedAmount1 = common.BigAdd(posInfo.HedgedAmount1, amount1)
 
-	l.Infow("Update position snapshot", "snapshot", posSnapshot)
-	e.positionsSnapshot[newPosInfo.ID] = posSnapshot
+	l.Infow("Update position hedged amounts", "newPosInfo", newPosInfo)
+	e.positionMap[posInfo.ID] = newPosInfo
 
 	return nil
 }
@@ -307,10 +317,14 @@ func (e *ElasticLM) getPositions(ctx context.Context) ([]position.Position, erro
 
 		amount0, amount1 := common.ExtractLiquidity(currentTick, tickLower, tickUpper, sqrtPrice, liquidity)
 		res = append(res, position.Position{
-			ID:         posData.ID,
-			Liquidity:  liquidity,
-			MaxAmount0: maxAmount0,
-			MaxAmount1: maxAmount1,
+			ID:            posData.ID,
+			Liquidity:     liquidity,
+			TickLower:     tickLower,
+			TickUpper:     tickUpper,
+			MaxAmount0:    maxAmount0,
+			MaxAmount1:    maxAmount1,
+			HedgedAmount0: big.NewInt(0),
+			HedgedAmount1: big.NewInt(0),
 			Token0: common.Token{
 				Amount:   amount0,
 				Symbol:   posData.Pool.Token0.Symbol,
@@ -327,11 +341,83 @@ func (e *ElasticLM) getPositions(ctx context.Context) ([]position.Position, erro
 	return res, nil
 }
 
+func (e *ElasticLM) loadPositions() error {
+	l := e.logger
+
+	l.Infow("Load open positions from database")
+	var positions []models.Position
+	err := e.db.Where("liquidity > 0").Find(&positions).Error
+	if err != nil {
+		l.Errorw("Fail to get positions from database", "error", err)
+		return err
+	}
+
+	l.Infow("Open positions from database loaded", "positions", positions)
+
+	for _, pos := range positions {
+		liquidity := common.NewBigIntFromString(pos.Liquidity, 10)
+		amount0 := common.NewBigIntFromString(pos.Amount0, 10)
+		amount1 := common.NewBigIntFromString(pos.Amount1, 10)
+		hedgedAmount0 := common.NewBigIntFromString(pos.HedgedAmount0, 10)
+		hedgedAmount1 := common.NewBigIntFromString(pos.HedgedAmount1, 10)
+
+		lowerSqrtPrice := common.GetSqrtRatioAtTick(pos.TickLower)
+		upperSqrtPrice := common.GetSqrtRatioAtTick(pos.TickUpper)
+		maxAmount0 := common.CalculateAmount0(lowerSqrtPrice, upperSqrtPrice, liquidity)
+		maxAmount1 := common.CalculateAmount1(lowerSqrtPrice, upperSqrtPrice, liquidity)
+		e.positionMap[pos.ID] = position.Position{
+			ID:            pos.ID,
+			Liquidity:     liquidity,
+			TickLower:     pos.TickLower,
+			TickUpper:     pos.TickUpper,
+			MaxAmount0:    maxAmount0,
+			MaxAmount1:    maxAmount1,
+			HedgedAmount0: hedgedAmount0,
+			HedgedAmount1: hedgedAmount1,
+			Token0: common.Token{
+				Symbol:   pos.Symbol0,
+				Decimals: pos.Decimals0,
+				Amount:   amount0,
+			},
+			Token1: common.Token{
+				Symbol:   pos.Symbol1,
+				Decimals: pos.Decimals1,
+				Amount:   amount1,
+			},
+		}
+	}
+
+	return nil
+}
+
+func (e *ElasticLM) savePositions() error {
+	positions := make([]models.Position, 0, len(e.positionMap))
+	for _, pos := range e.positionMap {
+		positions = append(positions, models.Position{
+			ID:            pos.ID,
+			Liquidity:     pos.Liquidity.String(),
+			TickLower:     pos.TickLower,
+			TickUpper:     pos.TickUpper,
+			Symbol0:       pos.Token0.Symbol,
+			Amount0:       pos.Token0.Amount.String(),
+			Decimals0:     pos.Token0.Decimals,
+			HedgedAmount0: pos.HedgedAmount0.String(),
+			Symbol1:       pos.Token1.Symbol,
+			Amount1:       pos.Token1.Amount.String(),
+			Decimals1:     pos.Token1.Decimals,
+			HedgedAmount1: pos.HedgedAmount1.String(),
+			UpdatedAt:     time.Now(),
+		})
+	}
+
+	return e.db.Clauses(clause.OnConflict{UpdateAll: true}).Create(&positions).Error
+}
+
 func (e *ElasticLM) getBinancePerpetualSymbol(token common.Token) string {
 	symbol, ok := e.tokenInstrumentMap[strings.ToUpper(token.Symbol)]
 	if ok {
 		return symbol
 	}
 
-	return token.GetBinancePerpetualSymbol()
+	return token.GetBinancePerpetualSymbol(e.quoteCurrency)
 }
