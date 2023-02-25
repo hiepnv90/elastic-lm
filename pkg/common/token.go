@@ -61,6 +61,8 @@ func (t Token) NormalizedSymbol() string {
 		return "LINK"
 	case "AAVE.E":
 		return "AAVE"
+	case "MKNC":
+		return "KNC"
 	default:
 		return symbol
 	}
