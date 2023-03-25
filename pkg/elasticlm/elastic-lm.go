@@ -346,7 +346,7 @@ func (e *ElasticLM) loadPositions() error {
 
 	l.Infow("Load open positions from database")
 	var positions []models.Position
-	err := e.db.Where("id IN ? liquidity > 0", e.positionIDs).Find(&positions).Error
+	err := e.db.Where("id IN ? AND liquidity > 0", e.positionIDs).Find(&positions).Error
 	if err != nil {
 		l.Errorw("Fail to get positions from database", "error", err)
 		return err
