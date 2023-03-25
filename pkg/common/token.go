@@ -29,6 +29,7 @@ func (t Token) IsStable() bool {
 		symbol == "MUSD" ||
 		symbol == "USDK" ||
 		symbol == "MIMATIC" ||
+		symbol == "MAI" ||
 		symbol == "MIM"
 }
 

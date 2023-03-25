@@ -391,6 +391,10 @@ func (e *ElasticLM) loadPositions() error {
 }
 
 func (e *ElasticLM) savePositions() error {
+	if len(e.positionMap) == 0 {
+		return nil
+	}
+
 	positions := make([]models.Position, 0, len(e.positionMap))
 	for _, pos := range e.positionMap {
 		positions = append(positions, models.Position{
