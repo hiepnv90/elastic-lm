@@ -36,7 +36,10 @@ type Position struct {
 
 func AutoMigrate(db *gorm.DB, reset bool) error {
 	if reset {
-		db.Migrator().DropTable(&Position{})
+		err := db.Migrator().DropTable(&Position{})
+		if err != nil {
+			return err
+		}
 	}
 
 	return db.AutoMigrate(&Position{})
